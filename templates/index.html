@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>个性化正弦波音乐生成器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        .container {
+            margin-top: 20px;
+        }
+        canvas {
+            border: 1px solid #ccc;
+            margin: 20px 0;
+        }
+        .controls {
+            margin: 20px 0;
+        }
+        input[type="number"] {
+            width: 100px;
+            padding: 5px;
+            margin: 0 10px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 0 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <h1>正弦波音乐生成器</h1>
+    <style>
+        .section {
+            border: 1px solid #ccc;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .section-title {
+            font-size: 1.2em;
+            margin-bottom: 15px;
+            color: #333;
+        }
+    </style>
+    <div class="container">
+        <div class="section">
+            <div class="section-title">预设频率播放</div>
+            <div class="controls">
+                <label>频率1 (Hz):</label>
+                <input type="number" id="freq1" value="440" min="20" max="2000">
+                <label>振幅1 (0-1):</label>
+                <input type="number" id="amp1" value="0.5" min="0" max="1" step="0.1">
+            </div>
+            <div class="controls">
+                <label>频率2 (Hz):</label>
+                <input type="number" id="freq2" value="880" min="20" max="2000">
+                <label>振幅2 (0-1):</label>
+                <input type="number" id="amp2" value="0.3" min="0" max="1" step="0.1">
+            </div>
+            <div class="controls">
+                <button onclick="startSound()">开始播放</button>
+                <button onclick="stopSound()">停止播放</button>
+            </div>
+            <canvas id="presetWaveform" width="700" height="200"></canvas>
+        </div>
+
+        <div class="section">
+            <div class="section-title">实时录音分析</div>
+            <div class="controls">
+                <label>姓名：</label>
+                <input type="text" id="studentName" placeholder="请输入你的姓名">
+                <button id="startRecord" onclick="startRecording()">开始录音</button>
+                <button id="stopRecord" onclick="stopRecording()" disabled>停止录音</button>
+            </div>
+            <canvas id="recordWaveform" width="700" height="200"></canvas>
+            <div id="averageValues" style="margin-top: 20px; text-align: left;">
+                <h3>录音分析结果：</h3>
+                <p>主频率：<span id="mainFreq">0</span> Hz</p>
+                <p>平均振幅：<span id="avgAmp">0</span></p>
+            </div>
+            <div class="controls">
+                <button onclick="generateFinalImage()">生成专属函数图像</button>
+                <button onclick="printImage()">打印图像</button>
+            </div>
+            <canvas id="finalImage" width="700" height="400" style="display: none;"></canvas>
+        </div>
+    </div>
+    </div>
+
+    <script>
+        let audioContext;
+        let oscillator1;
+        let oscillator2;
+        let gainNode1;
+        let gainNode2;
+        let analyser;
+        let isPlaying = false;
+        
+        // 用于实时分析的变量
+        let recordAnalyser;
+        let recordingData = [];
+        let isRecording = false;
+        let animationId;
+        let recordingStream;
+        let recordingSource;
+
+        // 录音相关函数
+        async function startRecording() {
+            try {
+                recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                recordingSource = audioContext.createMediaStreamSource(recordingStream);
+                recordAnalyser = audioContext.createAnalyser();
+                recordAnalyser.fftSize = 2048;
+                recordingSource.connect(recordAnalyser);
+                
+                recordingData = [];
+                isRecording = true;
+                
+                function analyzeAudio() {
+                    if (!isRecording) return;
+                    
+                    const bufferLength = recordAnalyser.frequencyBinCount;
+                    const timeData = new Float32Array(bufferLength);
+                    const freqData = new Float32Array(bufferLength);
+                    
+                    recordAnalyser.getFloatTimeDomainData(timeData);
+                    recordAnalyser.getFloatFrequencyData(freqData);
+                    
+                    // 计算实时频率和振幅
+                    let maxAmp = 0;
+                    let dominantFreq = 0;
+                    let maxFreqAmp = -Infinity;
+                    
+                    // 计算时域振幅
+                    for (let i = 0; i < bufferLength; i++) {
+                        const amplitude = Math.abs(timeData[i]);
+                        if (amplitude > maxAmp) maxAmp = amplitude;
+                    }
+                    
+                    // 寻找主频率
+                    for (let i = 0; i < bufferLength; i++) {
+                        if (freqData[i] > maxFreqAmp) {
+                            maxFreqAmp = freqData[i];
+                            dominantFreq = i * audioContext.sampleRate / (2 * bufferLength);
+                        }
+                    }
+                    
+                    // 限制频率范围在20-2000Hz
+                    dominantFreq = Math.max(20, Math.min(2000, dominantFreq));
+                    
+                    recordingData.push({ freq: dominantFreq, maxAmp });
+                    
+                    // 更新显示
+                    document.getElementById('mainFreq').textContent = Math.round(dominantFreq);
+                    document.getElementById('avgAmp').textContent = maxAmp.toFixed(3);
+                    
+                    // 绘制波形
+                    drawRecordWaveform(timeData);
+                    
+                    animationId = requestAnimationFrame(analyzeAudio);
+                }
+                
+                analyzeAudio();
+                document.getElementById('startRecord').disabled = true;
+                document.getElementById('stopRecord').disabled = false;
+            } catch (err) {
+                console.error('录音失败:', err);
+                alert('无法访问麦克风，请确保已授予录音权限。');
+            }
+        }
+        
+        function stopRecording() {
+            isRecording = false;
+            cancelAnimationFrame(animationId);
+            
+            if (recordingStream) {
+                recordingStream.getTracks().forEach(track => track.stop());
+                recordingStream = null;
+            }
+            
+            if (recordingSource) {
+                recordingSource.disconnect();
+                recordingSource = null;
+            }
+            
+            document.getElementById('startRecord').disabled = false;
+            document.getElementById('stopRecord').disabled = true;
+            
+            // 计算平均值
+            if (recordingData.length > 0) {
+                const avgFreq = recordingData.reduce((sum, data) => sum + data.freq, 0) / recordingData.length;
+                const avgAmp = recordingData.reduce((sum, data) => sum + data.maxAmp, 0) / recordingData.length;
+                
+                // 生成最终函数
+                generateFinalImage(avgFreq, avgAmp);
+            }
+            
+            // 清空录音波形画布
+            const canvas = document.getElementById('recordWaveform');
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'rgb(200, 200, 200)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function initAudio() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            oscillator1 = audioContext.createOscillator();
+            oscillator2 = audioContext.createOscillator();
+            gainNode1 = audioContext.createGain();
+            gainNode2 = audioContext.createGain();
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 2048;
+
+            oscillator1.connect(gainNode1);
+            oscillator2.connect(gainNode2);
+            gainNode1.connect(analyser);
+            gainNode2.connect(analyser);
+            analyser.connect(audioContext.destination);
+
+            oscillator1.type = 'sine';
+            oscillator2.type = 'sine';
+        }
+
+        function startSound() {
+            if (isPlaying) return;
+
+            if (!audioContext) initAudio();
+
+            const freq1 = parseFloat(document.getElementById('freq1').value);
+            const freq2 = parseFloat(document.getElementById('freq2').value);
+            const amp1 = parseFloat(document.getElementById('amp1').value);
+            const amp2 = parseFloat(document.getElementById('amp2').value);
+
+            oscillator1.frequency.setValueAtTime(freq1, audioContext.currentTime);
+            oscillator2.frequency.setValueAtTime(freq2, audioContext.currentTime);
+            gainNode1.gain.setValueAtTime(amp1, audioContext.currentTime);
+            gainNode2.gain.setValueAtTime(amp2, audioContext.currentTime);
+
+            oscillator1.start();
+            oscillator2.start();
+            isPlaying = true;
+
+            // 开始绘制预设波形
+            drawPresetWaveform();
+        }
+
+        function stopSound() {
+            if (!isPlaying) return;
+
+            oscillator1.stop();
+            oscillator2.stop();
+            isPlaying = false;
+            audioContext = null;
+
+            // 清空预设波形画布
+            const canvas = document.getElementById('presetWaveform');
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'rgb(200, 200, 200)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function updateWaveform() {
+            if (!isPlaying) {
+                const freq1 = parseFloat(document.getElementById('freq1').value);
+                const freq2 = parseFloat(document.getElementById('freq2').value);
+                const amp1 = parseFloat(document.getElementById('amp1').value);
+                const amp2 = parseFloat(document.getElementById('amp2').value);
+
+                // 更新平均值数组
+                freq1Values.push(freq1);
+                freq2Values.push(freq2);
+                amp1Values.push(amp1);
+                amp2Values.push(amp2);
+
+                // 计算并显示平均值
+                document.getElementById('avgFreq1').textContent = 
+                    (freq1Values.reduce((a, b) => a + b, 0) / freq1Values.length).toFixed(2);
+                document.getElementById('avgFreq2').textContent = 
+                    (freq2Values.reduce((a, b) => a + b, 0) / freq2Values.length).toFixed(2);
+                document.getElementById('avgAmp1').textContent = 
+                    (amp1Values.reduce((a, b) => a + b, 0) / amp1Values.length).toFixed(2);
+                document.getElementById('avgAmp2').textContent = 
+                    (amp2Values.reduce((a, b) => a + b, 0) / amp2Values.length).toFixed(2);
+
+                // 绘制实时波形
+                drawStaticWaveform(freq1, freq2, amp1, amp2);
+            }
+        }
+
+        function drawStaticWaveform(freq1, freq2, amp1, amp2) {
+            const canvas = document.getElementById('waveform');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.beginPath();
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+
+            for (let x = 0; x < canvas.width; x++) {
+                const t = x / canvas.width * 2;
+                const y = canvas.height/2 + 
+                    (amp1 * Math.sin(2 * Math.PI * freq1 * t) + 
+                     amp2 * Math.sin(2 * Math.PI * freq2 * t)) * canvas.height/4;
+                
+                if (x === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.stroke();
+        }
+
+        function generateFinalImage() {
+            if (!recordingData || recordingData.length === 0) {
+                alert('请先进行录音！');
+                return;
+            }
+
+            const canvas = document.getElementById('finalImage');
+            const ctx = canvas.getContext('2d');
+            const studentName = document.getElementById('studentName').value || '匿名同学';
+            
+            // 计算平均频率和振幅
+            const avgFreq = recordingData.reduce((sum, data) => sum + data.freq, 0) / recordingData.length;
+            const avgAmp = recordingData.reduce((sum, data) => sum + data.maxAmp, 0) / recordingData.length;
+            
+            // 清空画布
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 绘制标题
+            ctx.fillStyle = 'black';
+            ctx.font = '24px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${studentName}的专属正弦波函数`, canvas.width/2, 40);
+            
+            // 绘制波形
+            ctx.beginPath();
+            ctx.strokeStyle = 'blue';
+            ctx.lineWidth = 2;
+            
+            for (let x = 0; x < canvas.width; x++) {
+                const t = x / canvas.width * 2;
+                const y = canvas.height/2 + 
+                    avgAmp * Math.sin(2 * Math.PI * avgFreq * t) * canvas.height/4;
+                
+                if (x === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.stroke();
+            
+            // 添加函数表达式
+            ctx.font = '16px Arial';
+            ctx.fillText(
+                `y = ${avgAmp.toFixed(2)}sin(2π·${avgFreq.toFixed(0)}x)`,
+                canvas.width/2,
+                canvas.height - 40
+            );
+            
+            canvas.style.display = 'block';
+        }
+
+        function printImage() {
+            const canvas = document.getElementById('finalImage');
+            if (canvas.style.display === 'none') {
+                alert('请先生成专属函数图像！');
+                return;
+            }
+            const dataUrl = canvas.toDataURL();
+            const windowContent = '<!DOCTYPE html>';
+            const printWindow = window.open('', '', 'height=600,width=800');
+            printWindow.document.write(windowContent);
+            printWindow.document.write('<img src="' + dataUrl + '">');
+            printWindow.document.close();
+            printWindow.focus();
+            printWindow.print();
+            printWindow.close();
+        }
+
+        function drawPresetWaveform() {
+            const canvas = document.getElementById('presetWaveform');
+            const ctx = canvas.getContext('2d');
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+
+            function draw() {
+                requestAnimationFrame(draw);
+                analyser.getByteTimeDomainData(dataArray);
+
+                ctx.fillStyle = 'rgb(200, 200, 200)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = 'rgb(0, 0, 0)';
+                ctx.beginPath();
+
+                const sliceWidth = canvas.width * 1.0 / bufferLength;
+                let x = 0;
+
+                for (let i = 0; i < bufferLength; i++) {
+                    const v = dataArray[i] / 128.0;
+                    const y = v * canvas.height / 2;
+
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+
+                    x += sliceWidth;
+                }
+
+                ctx.lineTo(canvas.width, canvas.height / 2);
+                ctx.stroke();
+            }
+
+            draw();
+        }
+
+        function drawRecordWaveform(audioData) {
+            const canvas = document.getElementById('recordWaveform');
+            const ctx = canvas.getContext('2d');
+            
+            ctx.fillStyle = 'rgb(200, 200, 200)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'rgb(0, 0, 255)';
+            ctx.beginPath();
+
+            const sliceWidth = canvas.width * 1.0 / audioData.length;
+            let x = 0;
+
+            for (let i = 0; i < audioData.length; i++) {
+                const v = audioData[i];
+                const y = (v + 1) * canvas.height / 2;
+
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+
+                x += sliceWidth;
+            }
+
+            ctx.lineTo(canvas.width, canvas.height / 2);
+            ctx.stroke();
+        }
+    </script>
+</body>
+</html>
