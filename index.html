@@ -41,7 +41,10 @@
     </style>
 </head>
 <body>
-    <h1>正弦波音乐生成器</h1>
+    <div style="display: flex; align-items: center; justify-content: center;">
+        <h1 style="margin-right: 10px;">正弦波音乐生成器-By 书名的科学家们 Version 1</h1>
+        <img src="emojis/2caa4842b27425aad7d6fbfe41f83c32.png" alt="emoji" style="width: 40px; height: 40px;">
+    </div>
     <style>
         .section {
             border: 1px solid #ccc;
@@ -101,6 +104,26 @@
     </div>
 
     <script>
+        // 表情图片数组
+        const emojis = [
+            'emojis/2caa4842b27425aad7d6fbfe41f83c32.png',
+            'emojis/4eeb1219ea88c85d7d6fbfe41f83c1.png'
+        ];
+
+        // 随机选择表情图片
+        function randomEmoji() {
+            const emojiImg = document.querySelector('img[alt="emoji"]');
+            const randomIndex = Math.floor(Math.random() * emojis.length);
+            emojiImg.src = emojis[randomIndex];
+        }
+
+        // 页面加载时随机选择表情
+        window.onload = function() {
+            randomEmoji();
+            // 每5秒随机切换一次表情
+            setInterval(randomEmoji, 5000);
+        };
+
         let audioContext;
         let oscillator1;
         let oscillator2;
