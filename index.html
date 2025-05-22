@@ -350,7 +350,7 @@
             ctx.stroke();
         }
 
-        function generateFinalImage() {
+        async function generateFinalImage() {
             if (!recordingData || recordingData.length === 0) {
                 alert('请先进行录音！');
                 return;
@@ -379,9 +379,17 @@
             const emojiImg = new Image();
             const randomIndex = Math.floor(Math.random() * emojis.length);
             emojiImg.src = emojis[randomIndex];
-            emojiImg.onload = function() {
-                ctx.drawImage(emojiImg, canvas.width - 60, 10, 50, 50);
-            };
+            // 等待图片加载完成后再继续绘制
+            await new Promise((resolve) => {
+                emojiImg.onload = () => {
+                    ctx.drawImage(emojiImg, canvas.width - 60, 10, 50, 50);
+                    resolve();
+                };
+                emojiImg.onerror = () => {
+                    console.error('表情图片加载失败');
+                    resolve();
+                };
+            });
             
             // 绘制波形
             ctx.beginPath();
