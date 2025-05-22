@@ -373,14 +373,14 @@
             ctx.font = '24px Arial';
             ctx.textAlign = 'center';
             const titleText = `${studentName}的专属正弦波函数`;
-            ctx.fillText(titleText, canvas.width/2 - 30, 40);
+            ctx.fillText(titleText, canvas.width/2, 40);
             
             // 添加表情图片
             const emojiImg = new Image();
             const randomIndex = Math.floor(Math.random() * emojis.length);
             emojiImg.src = emojis[randomIndex];
             emojiImg.onload = function() {
-                ctx.drawImage(emojiImg, canvas.width/2 + ctx.measureText(titleText).width/2 - 10, 20, 40, 40);
+                ctx.drawImage(emojiImg, canvas.width - 60, 10, 50, 50);
             };
             
             // 绘制波形
