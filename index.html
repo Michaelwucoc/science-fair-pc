@@ -357,9 +357,9 @@
             ctx.lineWidth = 2;
             
             for (let x = 0; x < canvas.width; x++) {
-                const t = x / canvas.width * 2;
+                const t = x / canvas.width * 0.5; // 减少周期数量
                 const y = canvas.height/2 + 
-                    avgAmp * Math.sin(2 * Math.PI * avgFreq * t) * canvas.height/4;
+                    avgAmp * Math.sin(2 * Math.PI * avgFreq * t) * canvas.height/3; // 增大振幅
                 
                 if (x === 0) {
                     ctx.moveTo(x, y);
